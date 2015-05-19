@@ -1,5 +1,23 @@
-int apex_pin = 3;                      // what pin is the apex bill reader connect to?
-int apex_interrupt = 1;                // interrupt to use when sensing a pulse
+#include <SPI.h>
+#include <Adafruit_VS1053.h>
+#include <SD.h>
+
+// These are the pins used for the music maker shield
+#define SHIELD_RESET  -1      // VS1053 reset pin (unused!)
+#define SHIELD_CS     7      // VS1053 chip select pin (output)
+#define SHIELD_DCS    6      // VS1053 Data/command select pin (output)
+
+// These are common pins between breakout and shield
+#define CARDCS 4     // Card chip select pin
+// DREQ should be an Int pin, see http://arduino.cc/en/Reference/attachInterrupt
+#define DREQ 3       // VS1053 Data request, ideally an Interrupt pin
+
+Adafruit_VS1053_FilePlayer musicPlayer = 
+  Adafruit_VS1053_FilePlayer(SHIELD_RESET, SHIELD_CS, SHIELD_DCS, DREQ, CARDCS);
+
+
+int apex_pin = 2;                      // what pin is the apex bill reader connect to?
+int apex_interrupt = 0;                // interrupt to use when sensing a pulse
 int dollar = 0;                        // what is the dollar amount that was read?
 volatile unsigned long last_change = millis();  // when was the last time a pulse was received?
 volatile int pulses = 0;                        // counting the pulses sent
@@ -17,6 +35,21 @@ void setup()
   pinMode(apex_pin, INPUT_PULLUP);
   attachInterrupt(apex_interrupt, count_pulses, CHANGE);
   pinMode(led_pin, OUTPUT);     
+  
+  if (! musicPlayer.begin()) { // initialise the music player
+     Serial.println(F("Couldn't find VS1053, do you have the right pins defined?"));
+     while (1);
+  }
+  Serial.println(F("VS1053 found"));
+  
+  SD.begin(CARDCS);    // initialise the SD card
+  
+  // Set volume for left, right channels. lower numbers == louder volume!
+  musicPlayer.setVolume(1,1);
+  // If DREQ is on an interrupt pin (on uno, #2 or #3) we can do background
+  // audio playing
+  musicPlayer.useInterrupt(VS1053_FILEPLAYER_PIN_INT);  // DREQ int
+  
 }
 
 
@@ -37,38 +70,25 @@ void loop()
   unsigned long int now = millis();
 
   if (((now - last_change) > done_pulsing) && ! checked) { // no pulses for more than 1/10 second
-
-    if (pulses == 1) {            // $1
-      dollar = 1;
-    } else {
-
-      if (pulses == 5) {         // $5
-        dollar = 5;
-      } else {
-
-        if (pulses == 10) {      // $10
-          dollar = 10;
-        } else {
-
-          if (pulses == 20) {   // $20
-            dollar = 20;
-          }
-        }
-      }
-    }
     
+    dollar = pulses;    
     if( pulses != 0 ){
-      Serial.print("dollar: ");
-      Serial.print(dollar);
-      Serial.print(" pulses: ");
-      Serial.print(pulses);
-      Serial.print(" last pulse: ");
-      Serial.println(now - last_change);
+      reactToDonation(dollar);
     }
     
     pulses = 0;
     dollar = 0;
     checked = true;
-
   }
 }
+
+void reactToDonation(int dollars){
+  Serial.print(dollars);
+  Serial.println(" dollars detected");
+  
+  // Play one file, don't return until complete
+  Serial.println(F("Playing track 001"));
+  musicPlayer.playFullFile("track001.mp3");     
+
+}
+
