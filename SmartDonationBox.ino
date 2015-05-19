@@ -15,6 +15,11 @@
 Adafruit_VS1053_FilePlayer musicPlayer = 
   Adafruit_VS1053_FilePlayer(SHIELD_RESET, SHIELD_CS, SHIELD_DCS, DREQ, CARDCS);
 
+char * filenames[] = {
+  "applause.mp3",
+  "dudeness.wav"
+};
+int filename_index = 0;
 
 int apex_pin = 2;                      // what pin is the apex bill reader connect to?
 int apex_interrupt = 0;                // interrupt to use when sensing a pulse
@@ -86,9 +91,46 @@ void reactToDonation(int dollars){
   Serial.print(dollars);
   Serial.println(" dollars detected");
   
-  // Play one file, don't return until complete
-  Serial.println(F("Playing track 001"));
-  musicPlayer.playFullFile("track001.mp3");     
+  char * filename = NULL;
+  
+  // this switch does nothing
+  switch(dollars){
+    case 1:
+      filename = getRandomSoundFileName(0);
+      break;
+    case 2:
+      filename = getRandomSoundFileName(1);
+      break;
+    case 5: 
+      filename = getRandomSoundFileName(2);
+      break;
+    case 10:
+      filename = getRandomSoundFileName(3);
+      break; 
+    case 20:
+      filename = getRandomSoundFileName(4);
+      break;
+    case 50:
+      filename = getRandomSoundFileName(5);
+      break;
+    case 100:
+      filename = getRandomSoundFileName(6);
+      break;
+  }
+  
+  if(filename != NULL){
+    Serial.print("Playing Filename: ");
+    Serial.println(filename);
+    musicPlayer.playFullFile(filename);  
+  }
 
 }
 
+char * getRandomSoundFileName(uint8_t bin){    
+  int num_filenames = 2;
+  filename_index++;
+  if(filename_index >= num_filenames){
+    filename_index = 0;
+  }  
+  return filenames[filename_index];  
+}
