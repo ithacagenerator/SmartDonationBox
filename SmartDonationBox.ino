@@ -15,11 +15,8 @@
 Adafruit_VS1053_FilePlayer musicPlayer = 
   Adafruit_VS1053_FilePlayer(SHIELD_RESET, SHIELD_CS, SHIELD_DCS, DREQ, CARDCS);
 
-char * filenames[] = {
-  "applause.mp3",
-  "dudeness.wav"
-};
-int filename_index = 0;
+#define NUM_ACCEPTABLE_DENOMINATIONS (6)
+uint16_t filename_index[NUM_ACCEPTABLE_DENOMINATIONS] = {0};
 
 int apex_pin = 2;                      // what pin is the apex bill reader connect to?
 int apex_interrupt = 0;                // interrupt to use when sensing a pulse
@@ -91,34 +88,11 @@ void reactToDonation(int dollars){
   Serial.print(dollars);
   Serial.println(" dollars detected");
   
-  char * filename = NULL;
+  char filename[32] = {0};             // allocate space for the file name
+  getNextFilename(dollars, filename);  // maps dollars to denomination index
+                                       // advances the pointer, and possibly wraps around
   
-  // this switch does nothing
-  switch(dollars){
-    case 1:
-      filename = getRandomSoundFileName(0);
-      break;
-    case 2:
-      filename = getRandomSoundFileName(1);
-      break;
-    case 5: 
-      filename = getRandomSoundFileName(2);
-      break;
-    case 10:
-      filename = getRandomSoundFileName(3);
-      break; 
-    case 20:
-      filename = getRandomSoundFileName(4);
-      break;
-    case 50:
-      filename = getRandomSoundFileName(5);
-      break;
-    case 100:
-      filename = getRandomSoundFileName(6);
-      break;
-  }
-  
-  if(filename != NULL){
+  if(strlen(filename) != 0){
     Serial.print("Playing Filename: ");
     Serial.println(filename);
     musicPlayer.playFullFile(filename);  
@@ -126,11 +100,95 @@ void reactToDonation(int dollars){
 
 }
 
-char * getRandomSoundFileName(uint8_t bin){    
-  int num_filenames = 2;
-  filename_index++;
-  if(filename_index >= num_filenames){
-    filename_index = 0;
-  }  
-  return filenames[filename_index];  
+// if the file implied by the current index for the denomination
+void getNextFilename(uint8_t dollars, char * filename){
+  int8_t denomination_index = dollarsToDenominationIndex(dollars);  
+  boolean found_file = false;
+  
+  if((denomination_index >= 0) && (denomination_index < NUM_ACCEPTABLE_DENOMINATIONS)){
+    // filenames always start with 'clip', followed by four digits, followed by '.wav' or '.mp3'
+    // and clips are stored in folders named denom, followed by three digits (001, 005, 010, 020, 050, or 100)
+    // test for the existing of the current index
+    char wavname[32] = {0};
+    char mp3name[32] = {0};
+    uint16_t current_index = filename_index[denomination_index];    
+    snprintf(wavname, 31, "denom%03d/clip%04d.wav", dollars, current_index);
+    snprintf(mp3name, 31, "denom%03d/clip%04d.mp3", dollars, current_index);    
+    
+    Serial.print(F("Looking for file named: "));
+    Serial.print(wavname);    
+    Serial.print(F("..."));
+    if(SD.exists(wavname)){
+      found_file = true;
+      strncpy(filename, wavname, 23);
+      filename_index[denomination_index]++;
+      Serial.println(F("OK"));
+    }
+    else{
+      Serial.println(F("Fail."));      
+    }
+    
+    if(!found_file){
+      Serial.print(F("Looking for file named: "));
+      Serial.print(wavname);    
+      Serial.print(F("..."));      
+      if(SD.exists(mp3name)){
+        found_file = true;
+        strncpy(filename, mp3name, 23);
+        filename_index[denomination_index]++; 
+        Serial.println(F("OK"));        
+      }
+      else{
+        Serial.println(F("Fail."));
+      }
+    }
+    
+    if(!found_file){
+      filename_index[denomination_index] = 0;
+      memset(wavname, 0, 32); // clear the name
+      memset(mp3name, 0, 32); // clear the name
+      current_index = 0;     
+      snprintf(wavname, 31, "denom%03d/clip%04d.wav", dollars, current_index); // try again
+      snprintf(mp3name, 31, "denom%03d/clip%04d.mp3", dollars, current_index); // try again
+      Serial.print(F("Looking for file named: "));
+      Serial.print(wavname);    
+      Serial.print(F("..."));      
+      if(SD.exists(wavname)){
+        found_file = true;
+        strncpy(filename, wavname, 23);
+        filename_index[denomination_index]++; 
+        Serial.println(F("OK"));
+      }
+      else{
+        Serial.println(F("Fail."));
+      }
+      
+      if(!found_file){
+        found_file = true;
+        if(SD.exists(mp3name)){
+          strncpy(filename, mp3name, 23);
+          filename_index[denomination_index]++; 
+          Serial.println(F("OK"));        
+        }
+        else{
+          Serial.println(F("Fail."));
+        }             
+      }
+    }
+  }
+}
+
+int8_t dollarsToDenominationIndex(uint8_t dollars){
+  uint8_t ret = -1;
+  switch(dollars){
+    case 1: ret = 0; break;
+    case 5: ret = 1; break;
+    case 10: ret = 2; break;
+    case 20: ret = 3; break;
+    case 50: ret = 4; break;
+    case 100: ret = 5; break;
+    default: ret = -1; break;
+  }
+  
+  return ret;
 }
